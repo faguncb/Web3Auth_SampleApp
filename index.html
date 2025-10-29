@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Web3Auth Demo</title>
     <!-- 1. Tailwind CSS for styling -->
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script src="https://cdn.tailwindcss.com?v=3"></script>
     <style>
         /* A simple loader for showing a busy state */
         .loader {
@@ -25,273 +28,269 @@
 <body class="bg-gray-100 font-sans antialiased">
 
 <!-- 2. Ethers.js: To interact with the blockchain -->
-<script src="[https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js](https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js)"></script>
+<script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 
 <!-- 3. Web3Auth Modal SDK: The main library -->
-<script src="[https://cdn.jsdelivr.net/npm/@web3auth/modal@7.3.2/dist/modal.umd.min.js](https://cdn.jsdelivr.net/npm/@web3auth/modal@7.3.2/dist/modal.umd.min.js)"></script>
+<script src="web3auth-modal.js"></script>
 
-<script type="module">
+<script>
     // --- 0. SCRIPT SETUP ---
-    // Get the Web3Auth class from the window object (where the UMD bundle places it)
-    const { Web3Auth } = window.web3auth.modal;
+    console.log("Starting Web3Auth Demo...");
+    
+    // Test if scripts loaded
+    setTimeout(() => {
+        console.log("After 2 seconds:");
+        console.log("Ethers available:", typeof ethers !== 'undefined');
+        console.log("Modal available:", typeof window.Modal !== 'undefined');
+        console.log("Web3Auth available:", typeof window.Modal?.Web3Auth !== 'undefined');
+    }, 2000);
 
-    // --- 1. CONFIGURATION ---
-    const clientId = "BMPMZSSZyj5VGGq8DwDZ5RUQDmMWKzzRLNdFbZRjkQAe0Pz-yK_CKAN4Dx0VMaAm1ArT392kzBw0q6cQugbQGa0"; // Your Client ID from dashboard.web3auth.io
-    const web3AuthNetwork = "sapphire_devnet"; // "sapphire_mainnet" for production
-    const chainConfig = {
-        chainNamespace: "eip155",
-        chainId: "0xaa36a7", // Sepolia Testnet
-        rpcTarget: "[https://rpc.sepolia.org](https://rpc.sepolia.org)",
-        displayName: "Sepolia Testnet",
-        blockExplorer: "[https://sepolia.etherscan.io](https://sepolia.etherscan.io)",
-        ticker: "ETH",
-        tickerName: "Ethereum",
-    };
-
-    // Global variables to hold SDK instances
-    let web3auth = null;
-    let provider = null; // This will be the EIP-1193 provider from Web3Auth
-
-    // Get DOM elements
-    const loginView = document.getElementById("login-view");
-    const appView = document.getElementById("app-view");
-    const loginBtn = document.getElementById("login-btn");
-    const loginBtnText = document.getElementById("login-btn-text");
-    const loginLoader = document.getElementById("login-loader");
-    const logoutBtn = document.getElementById("logout-btn");
-    const signMsgBtn = document.getElementById("sign-message-btn");
-    const userInfoDiv = document.getElementById("user-info");
-    const consoleEl = document.getElementById("console");
-
-    // --- 2. INITIALIZATION ---
-
-    // Runs on page load
-    async function main() {
+    function initializeApp() {
+        let Web3Auth;
+        
         try {
-            log("Initializing Web3Auth...");
-            web3auth = new Web3Auth({
-                clientId,
-                web3AuthNetwork,
-                chainConfig,
-                uiConfig: {
-                    theme: "light",
-                    loginMethodsOrder: ["google", "facebook", "twitter"],
-                    appName: "Web3Auth Demo",
-                },
-            });
-
-            // This initializes the modal. It doesn't log the user in.
-            await web3auth.initModal();
-            log("Web3Auth Initialized.");
-
-            // If a user was already logged in, their provider will be available
-            if (web3auth.provider) {
-                provider = web3auth.provider;
-                updateUI(true); // Show the app view
-                getUserDetails(); // Fetch their details
+            if (window.Modal && window.Modal.Web3Auth) {
+                Web3Auth = window.Modal.Web3Auth;
+                console.log("Web3Auth found!");
+            } else {
+                console.error("Web3Auth not available");
+                console.log("Available window.Modal:", window.Modal);
+                console.log("Available window.Modal keys:", window.Modal ? Object.keys(window.Modal) : 'undefined');
+                alert("Failed to load Web3Auth library. Please refresh the page and try again.");
+                return;
             }
         } catch (error) {
-            console.error(error);
-            log(`Error initializing: ${error.message}`);
-        }
-    }
-
-    // --- 3. LOGIN & LOGOUT ---
-
-    async function login() {
-        if (!web3auth) {
-            log("Web3Auth not initialized yet.");
+            console.error("Failed to load Web3Auth:", error);
+            alert("Failed to load Web3Auth library. Please refresh the page and try again.");
             return;
         }
 
-        try {
-            setLoginBusy(true, "Logging in...");
+        // --- 1. CONFIGURATION ---
+        const clientId = "BMPMZSSZyj5VGGq8DwDZ5RUQDmMWKzzRLNdFbZRjkQAe0Pz-yK_CKAN4Dx0VMaAm1ArT392kzBw0q6cQugbQGa0"; // Your Client ID from dashboard.web3auth.io
+        const web3AuthNetwork = "sapphire_devnet"; // Web3Auth network
+        const chainConfig = {
+            chainNamespace: "eip155",
+            chainId: "0xaa36a7", // Sepolia Testnet
+            rpcTarget: "https://rpc.sepolia.org",
+            displayName: "Sepolia Testnet",
+            blockExplorer: "https://sepolia.etherscan.io",
+            ticker: "ETH",
+            tickerName: "Ethereum",
+        };
 
-            // This is the core function that opens the modal
-            provider = await web3auth.connect();
+        // Global variables to hold SDK instances
+        let web3auth = null;
+        let provider = null; // This will be the EIP-1193 provider from Web3Auth
 
-            log("Login successful!");
-            updateUI(true); // Show the app view
-            getUserDetails(); // Fetch wallet details
+        // Get DOM elements
+        const loginView = document.getElementById("login-view");
+        const appView = document.getElementById("app-view");
+        const loginBtn = document.getElementById("login-btn");
+        const loginBtnText = document.getElementById("login-btn-text");
+        const loginLoader = document.getElementById("login-loader");
+        const logoutBtn = document.getElementById("logout-btn");
+        const signMsgBtn = document.getElementById("sign-message-btn");
+        const userInfoDiv = document.getElementById("user-info");
+        const consoleEl = document.getElementById("console");
 
-        } catch (error) {
-            console.error(error);
-            log(`Login failed: ${error.message}`);
-        } finally {
-            setLoginBusy(false);
+        // --- 2. INITIALIZATION ---
+
+        // Runs on page load
+        async function main() {
+            try {
+                log("Initializing Web3Auth...");
+                web3auth = new Web3Auth({
+                    clientId,
+                    web3AuthNetwork,
+                    chainConfig,
+                    uiConfig: {
+                        theme: "light",
+                        loginMethodsOrder: ["google", "facebook", "twitter"],
+                        appName: "Web3Auth Demo",
+                    },
+                });
+
+                // This initializes the modal. It doesn't log the user in.
+                await web3auth.initModal();
+                log("Web3Auth Initialized successfully!");
+
+                // If a user was already logged in, their provider will be available
+                if (web3auth.provider) {
+                    provider = web3auth.provider;
+                    log("Found existing session, restoring user state...");
+                    updateUI(true); // Show the app view
+                    getUserDetails(); // Fetch their details
+                } else {
+                    log("No existing session found. Ready for login.");
+                }
+            } catch (error) {
+                console.error(error);
+                log(`Error initializing: ${error.message}`);
+            }
         }
+
+        // --- 3. LOGIN & LOGOUT ---
+
+        async function login() {
+            if (!web3auth) {
+                log("Web3Auth not initialized yet.");
+                return;
+            }
+
+            try {
+                setLoginBusy(true, "Logging in...");
+
+                // This is the core function that opens the modal
+                provider = await web3auth.connect();
+
+                log("Login successful!");
+                updateUI(true); // Show the app view
+                getUserDetails(); // Fetch wallet details
+
+            } catch (error) {
+                console.error(error);
+                log(`Login failed: ${error.message}`);
+            } finally {
+                setLoginBusy(false);
+            }
+        }
+
+        async function logout() {
+            if (!web3auth) {
+                log("Web3Auth not initialized.");
+                return;
+            }
+
+            try {
+                log("Logging out...");
+                await web3auth.logout();
+                provider = null; // Clear the provider
+
+                log("Logged out.");
+                updateUI(false); // Show the login view
+                userInfoDiv.innerHTML = ""; // Clear user info
+
+            } catch (error) {
+                console.error(error);
+                log(`Logout failed: ${error.message}`);
+            }
+        }
+
+        // --- 4. WEB3 ACTIONS (with Ethers.js) ---
+
+        async function getUserDetails() {
+            if (!provider) {
+                log("Provider not available. Please log in first.");
+                return;
+            }
+            
+            if (!web3auth) {
+                log("Web3Auth not initialized.");
+                return;
+            }
+            
+            try {
+                log("Fetching user details...");
+
+                // 1. Wrap the Web3Auth provider with Ethers.js
+                const ethersProvider = new ethers.providers.Web3Provider(provider);
+
+                // 2. Get the wallet's signer object
+                const signer = ethersProvider.getSigner();
+
+                // 3. Get social login info (email, name, etc.)
+                const userInfo = await web3auth.getUserInfo();
+
+                // 4. Get the wallet address
+                const address = await signer.getAddress();
+
+                // 5. Get the balance (in Wei) and format it to ETH
+                const balanceWei = await ethersProvider.getBalance(address);
+                const balanceEth = ethers.utils.formatEther(balanceWei);
+
+                // 6. Display the info
+                userInfoDiv.innerHTML = `
+                <p><strong>Email:</strong> ${userInfo.email || 'N/A'}</p>
+                <p><strong>Name:</strong> ${userInfo.name || 'N/A'}</p>
+                <p class="mt-2"><strong>Wallet Address:</strong></p>
+                <p class="font-mono">${address}</p>
+                <p class="mt-2"><strong>Sepolia Balance:</strong> ${parseFloat(balanceEth).toFixed(5)} ETH</p>
+            `;
+                log("User details fetched successfully.");
+            } catch (error) {
+                console.error(error);
+                log(`Error fetching details: ${error.message}`);
+            }
+        }
+
+        async function signMessage() {
+            if (!provider) {
+                log("Provider not available.");
+                return;
+            }
+            try {
+                log("Signing test message...");
+                const ethersProvider = new ethers.providers.Web3Provider(provider);
+                const signer = ethersProvider.getSigner();
+
+                const originalMessage = "Hello from Web3Auth!";
+
+                // This will open a popup from Web3Auth asking the user to confirm
+                const signature = await signer.signMessage(originalMessage);
+
+                log(`Message: "${originalMessage}"`);
+                log(`Signature: ${signature}`);
+            } catch (error) {
+                console.error(error);
+                log(`Error signing message: ${error.message}`);
+            }
+        }
+
+        // --- 5. HELPER FUNCTIONS ---
+
+        function updateUI(isLoggedIn) {
+            if (isLoggedIn) {
+                loginView.classList.add("hidden");
+                appView.classList.remove("hidden");
+            } else {
+                loginView.classList.remove("hidden");
+                appView.classList.add("hidden");
+            }
+        }
+
+        function setLoginBusy(isBusy, text = "Log In") {
+            if (isBusy) {
+                loginBtnText.classList.add("hidden");
+                loginLoader.classList.remove("hidden");
+                loginBtn.disabled = true;
+            } else {
+                loginBtnText.innerText = text;
+                loginBtnText.classList.remove("hidden");
+                loginLoader.classList.add("hidden");
+                loginBtn.disabled = false;
+            }
+        }
+
+        function log(message) {
+            console.log(message);
+            consoleEl.innerHTML = `${message}\n` + consoleEl.innerHTML;
+        }
+
+        // --- 6. ATTACH EVENT LISTENERS ---
+
+        loginBtn.addEventListener("click", login);
+        logoutBtn.addEventListener("click", logout);
+        signMsgBtn.addEventListener("click", signMessage);
+
+        // Start the application!
+        main();
     }
 
-    async function logout() {
-        if (!web3auth) {
-            log("Web3Auth not initialized.");
-            return;
-        }
-
-        try {
-            log("Logging out...");
-            await web3auth.logout();
-            provider = null; // Clear the provider
-
-            log("Logged out.");
-            updateUI(false); // Show the login view
-            userInfoDiv.innerHTML = ""; // Clear user info
-
-        } catch (error) {
-            console.error(error);
-            log(`Logout failed: ${error.message}`);
-        }
-    }
-
-    // --- 3. LOGIN & LOGOUT ---
-
-    async function login() {
-        if (!web3auth) {
-            log("Web3Auth not initialized yet.");
-            return;
-        }
-
-        try {
-            setLoginBusy(true, "Logging in...");
-
-            // This is the core function that opens the modal
-            provider = await web3auth.connect();
-
-            log("Login successful!");
-            updateUI(true); // Show the app view
-            getUserDetails(); // Fetch wallet details
-
-        } catch (error) {
-            console.error(error);
-            log(`Login failed: ${error.message}`);
-        } finally {
-            setLoginBusy(false);
-        }
-    }
-
-    async function logout() {
-        if (!web3auth) {
-            log("Web3Auth not initialized.");
-            return;
-        }
-
-        try {
-            log("Logging out...");
-            await web3auth.logout();
-            provider = null; // Clear the provider
-
-            log("Logged out.");
-            updateUI(false); // Show the login view
-            userInfoDiv.innerHTML = ""; // Clear user info
-
-        } catch (error) {
-            console.error(error);
-            log(`Logout failed: ${error.message}`);
-        }
-    }
-
-    // --- 4. WEB3 ACTIONS (with Ethers.js) ---
-
-    async function getUserDetails() {
-        if (!provider) {
-            log("Provider not available.");
-            return;
-        }
-        try {
-            log("Fetching user details...");
-
-            // 1. Wrap the Web3Auth provider with Ethers.js
-            const ethersProvider = new ethers.providers.Web3Provider(provider);
-
-            // 2. Get the wallet's signer object
-            const signer = ethersProvider.getSigner();
-
-            // 3. Get social login info (email, name, etc.)
-            const userInfo = await web3auth.getUserInfo();
-
-            // 4. Get the wallet address
-            const address = await signer.getAddress();
-
-            // 5. Get the balance (in Wei) and format it to ETH
-            const balanceWei = await ethersProvider.getBalance(address);
-            const balanceEth = ethers.utils.formatEther(balanceWei);
-
-            // 6. Display the info
-            userInfoDiv.innerHTML = `
-            <p><strong>Email:</strong> ${userInfo.email || 'N/A'}</p>
-            <p><strong>Name:</strong> ${userInfo.name || 'N/A'}</p>
-            <p class="mt-2"><strong>Wallet Address:</strong></p>
-            <p class="font-mono">${address}</p>
-            <p class="mt-2"><strong>Sepolia Balance:</strong> ${parseFloat(balanceEth).toFixed(5)} ETH</p>
-        `;
-            log("User details fetched.");
-        } catch (error) {
-            console.error(error);
-            log(`Error fetching details: ${error.message}`);
-        }
-    }
-
-    async function signMessage() {
-        if (!provider) {
-            log("Provider not available.");
-            return;
-        }
-        try {
-            log("Signing test message...");
-            const ethersProvider = new ethers.providers.Web3Provider(provider);
-            const signer = ethersProvider.getSigner();
-
-            const originalMessage = "Hello from Web3Auth!";
-
-            // This will open a popup from Web3Auth asking the user to confirm
-            const signature = await signer.signMessage(originalMessage);
-
-            log(`Message: "${originalMessage}"`);
-            log(`Signature: ${signature}`);
-        } catch (error) {
-            console.error(error);
-            log(`Error signing message: ${error.message}`);
-        }
-    }
-
-    // --- 5. HELPER FUNCTIONS ---
-
-    function updateUI(isLoggedIn) {
-        if (isLoggedIn) {
-            loginView.classList.add("hidden");
-            appView.classList.remove("hidden");
-        } else {
-            loginView.classList.remove("hidden");
-            appView.classList.add("hidden");
-        }
-    }
-
-    function setLoginBusy(isBusy, text = "Log In") {
-        if (isBusy) {
-            loginBtnText.classList.add("hidden");
-            loginLoader.classList.remove("hidden");
-            loginBtn.disabled = true;
-        } else {
-            loginBtnText.innerText = text;
-            loginBtnText.classList.remove("hidden");
-            loginLoader.classList.add("hidden");
-            loginBtn.disabled = false;
-        }
-    }
-
-    function log(message) {
-        console.log(message);
-        consoleEl.innerHTML = `${message}\n` + consoleEl.innerHTML;
-    }
-
-    // --- 6. ATTACH EVENT LISTENERS ---
-
-    loginBtn.addEventListener("click", login);
-    logoutBtn.addEventListener("click", logout);
-    signMsgBtn.addEventListener("click", signMessage);
-
-    // Start the application!
-    main();
+    // Initialize the app after a delay to ensure scripts are loaded
+    setTimeout(() => {
+        console.log("Initializing app after delay...");
+        initializeApp();
+    }, 3000);
 
 </script>
 
