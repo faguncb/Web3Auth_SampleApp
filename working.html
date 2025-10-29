@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3Auth Working Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased">
+
+<!-- Ethers.js -->
+<script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+<!-- Web3Auth Modal SDK -->
+<script src="web3auth-modal.js"></script>
+
+<script>
+    console.log("Starting Web3Auth Working Demo...");
+    
+    // Test if scripts loaded
+    setTimeout(() => {
+        console.log("After 2 seconds:");
+        console.log("Ethers available:", typeof ethers !== 'undefined');
+        console.log("Modal available:", typeof window.Modal !== 'undefined');
+        console.log("Web3Auth available:", typeof window.Modal?.Web3Auth !== 'undefined');
+    }, 2000);
+
+    function initializeApp() {
+        let Web3Auth;
+        
+        try {
+            if (window.Modal && window.Modal.Web3Auth) {
+                Web3Auth = window.Modal.Web3Auth;
+                console.log("Web3Auth found!");
+            } else {
+                console.error("Web3Auth not available");
+                alert("Web3Auth not available");
+                return;
+            }
+        } catch (error) {
+            console.error("Failed to load Web3Auth:", error);
+            alert("Failed to load Web3Auth");
+            return;
+        }
+
+        // Configuration
+        const clientId = "BMPMZSSZyj5VGGq8DwDZ5RUQDmMWKzzRLNdFbZRjkQAe0Pz-yK_CKAN4Dx0VMaAm1ArT392kzBw0q6cQugbQGa0";
+        const web3AuthNetwork = "sapphire_devnet";
+        const chainConfig = {
+            chainNamespace: "eip155",
+            chainId: "0xaa36a7", // Sepolia Testnet
+            rpcTarget: "https://rpc.sepolia.org",
+            displayName: "Sepolia Testnet",
+            blockExplorer: "https://sepolia.etherscan.io",
+            ticker: "ETH",
+            tickerName: "Ethereum",
+        };
+
+        let web3auth = null;
+        let provider = null;
+
+        // DOM elements
+        const loginView = document.getElementById("login-view");
+        const appView = document.getElementById("app-view");
+        const loginBtn = document.getElementById("login-btn");
+        const loginBtnText = document.getElementById("login-btn-text");
+        const loginLoader = document.getElementById("login-loader");
+        const logoutBtn = document.getElementById("logout-btn");
+        const userInfoDiv = document.getElementById("user-info");
+        const consoleEl = document.getElementById("console");
+
+        function log(message) {
+            console.log(message);
+            consoleEl.innerHTML = `${message}\n` + consoleEl.innerHTML;
+        }
+
+        function updateUI(isLoggedIn) {
+            if (isLoggedIn) {
+                loginView.classList.add("hidden");
+                appView.classList.remove("hidden");
+            } else {
+                loginView.classList.remove("hidden");
+                appView.classList.add("hidden");
+            }
+        }
+
+        function setLoginBusy(isBusy, text = "Log In") {
+            if (isBusy) {
+                loginBtnText.classList.add("hidden");
+                loginLoader.classList.remove("hidden");
+                loginBtn.disabled = true;
+            } else {
+                loginBtnText.innerText = text;
+                loginBtnText.classList.remove("hidden");
+                loginLoader.classList.add("hidden");
+                loginBtn.disabled = false;
+            }
+        }
+
+        // Initialize Web3Auth
+        function main() {
+            try {
+                log("Initializing Web3Auth...");
+                web3auth = new Web3Auth({
+                    clientId,
+                    web3AuthNetwork,
+                    chainConfig,
+                    uiConfig: {
+                        theme: "light",
+                        appName: "Web3Auth Demo",
+                    },
+                });
+
+                web3auth.initModal().then(() => {
+                    log("Web3Auth Initialized successfully!");
+                    
+                    if (web3auth.provider) {
+                        provider = web3auth.provider;
+                        updateUI(true);
+                        getUserDetails();
+                    }
+                }).catch(error => {
+                    console.error("Error initializing Web3Auth:", error);
+                    log(`Error initializing: ${error.message}`);
+                });
+            } catch (error) {
+                console.error("Error creating Web3Auth:", error);
+                log(`Error creating Web3Auth: ${error.message}`);
+            }
+        }
+
+        function login() {
+            if (!web3auth) {
+                log("Web3Auth not initialized yet.");
+                return;
+            }
+
+            setLoginBusy(true, "Logging in...");
+            log("Opening Web3Auth modal...");
+
+            web3auth.connect().then(connectedProvider => {
+                provider = connectedProvider;
+                log("Login successful!");
+                updateUI(true);
+                getUserDetails();
+                setLoginBusy(false);
+            }).catch(error => {
+                console.error("Login error:", error);
+                log(`Login failed: ${error.message}`);
+                setLoginBusy(false);
+            });
+        }
+
+        function logout() {
+            if (!web3auth) {
+                log("Web3Auth not initialized.");
+                return;
+            }
+
+            log("Logging out...");
+            web3auth.logout().then(() => {
+                provider = null;
+                log("Logged out.");
+                updateUI(false);
+                userInfoDiv.innerHTML = "";
+            }).catch(error => {
+                console.error("Logout error:", error);
+                log(`Logout failed: ${error.message}`);
+            });
+        }
+
+        function getUserDetails() {
+            if (!provider) {
+                log("Provider not available.");
+                return;
+            }
+            
+            log("Fetching user details...");
+
+            const ethersProvider = new ethers.providers.Web3Provider(provider);
+            const signer = ethersProvider.getSigner();
+
+            web3auth.getUserInfo().then(userInfo => {
+                return signer.getAddress().then(address => {
+                    return ethersProvider.getBalance(address).then(balanceWei => {
+                        const balanceEth = ethers.utils.formatEther(balanceWei);
+
+                        userInfoDiv.innerHTML = `
+                        <p><strong>Email:</strong> ${userInfo.email || 'N/A'}</p>
+                        <p><strong>Name:</strong> ${userInfo.name || 'N/A'}</p>
+                        <p class="mt-2"><strong>Wallet Address:</strong></p>
+                        <p class="font-mono">${address}</p>
+                        <p class="mt-2"><strong>Sepolia Balance:</strong> ${parseFloat(balanceEth).toFixed(5)} ETH</p>
+                    `;
+                        log("User details fetched.");
+                    });
+                });
+            }).catch(error => {
+                console.error("Error fetching details:", error);
+                log(`Error fetching details: ${error.message}`);
+            });
+        }
+
+        // Event listeners
+        loginBtn.addEventListener("click", login);
+        logoutBtn.addEventListener("click", logout);
+
+        // Start the application
+        main();
+    }
+
+    // Initialize after delay
+    setTimeout(() => {
+        console.log("Initializing app...");
+        initializeApp();
+    }, 3000);
+</script>
+
+<div class="container mx-auto max-w-lg mt-10 p-6 bg-white rounded-xl shadow-lg">
+    <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Web3Auth Working Demo</h1>
+
+    <!-- Logged Out View -->
+    <div id="login-view">
+        <p class="text-center text-gray-600 mb-4">
+            Click the button to open Web3Auth modal with social login options.
+        </p>
+        <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center">
+            <span id="login-btn-text">Log In</span>
+            <div id="login-loader" class="loader hidden"></div>
+        </button>
+    </div>
+
+    <!-- Logged In View -->
+    <div id="app-view" class="hidden">
+        <div id="user-info" class="p-4 bg-gray-50 rounded-lg mb-4 text-sm break-words"></div>
+        <button id="logout-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+            Log Out
+        </button>
+        <div class="mt-4">
+            <h3 class="font-semibold text-gray-700">Console:</h3>
+            <pre id="console" class="bg-gray-900 text-white text-xs rounded-lg p-4 h-48 overflow-y-auto mt-2">App not initialized.</pre>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
